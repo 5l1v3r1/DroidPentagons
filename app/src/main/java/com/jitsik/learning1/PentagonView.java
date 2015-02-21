@@ -22,7 +22,39 @@ import android.view.ViewTreeObserver;
  */
 public class PentagonView extends View {
 
-    public PentagonAnimation[] animations;
+    public PentagonAnimation[] animations = new PentagonAnimation[10];
+    public Coords coordinateSystem = new Coords();
+
+    /**
+     * Coords converts coordinate systems.
+     */
+    private static class Coords {
+
+        private float scale = 0;
+        private float xTranslate = 0;
+        private float yTranslate = 0;
+
+        public float convertX(float x) {
+            return (x * scale) + xTranslate;
+        }
+
+        public float convertY(float y) {
+            return (y * scale) + yTranslate;
+        }
+
+        public void setSize(int width, int height) {
+            if (width > height) {
+                scale = (float)width;
+                xTranslate = 0;
+                yTranslate = -(float)(width - height) / 2;
+            } else {
+                scale = (float)height;
+                xTranslate = -(float)(height - width) / 2;
+                yTranslate = 0;
+            }
+        }
+
+    }
 
     /**
      * A force is two-component vector.
@@ -69,13 +101,13 @@ public class PentagonView extends View {
      * A pentagon has a center, an angle, a radius, and an opacity.
      */
     private static class Pentagon {
-
         public float x;
         public float y;
         public float angle;
         public float radius;
         public float opacity;
         private Paint paintCache;
+        private Path pathCache;
 
         Pentagon(float x, float y, float angle, float radius, float opacity) {
             this.x = x;
@@ -87,6 +119,8 @@ public class PentagonView extends View {
             paintCache = new Paint();
             paintCache.setFlags(Paint.ANTI_ALIAS_FLAG);
             paintCache.setStyle(Paint.Style.FILL);
+
+            pathCache = new Path();
         }
 
         public void clipAngle() {
@@ -102,28 +136,28 @@ public class PentagonView extends View {
             return new Pentagon(x, y, angle, radius, opacity);
         }
 
-        public void draw(Canvas canvas) {
+        public void draw(Canvas canvas, Coords coords) {
             paintCache.setColor(Color.argb((int)(opacity * 255.0f), 255, 255,
                     255));
 
             // Draw a pentagon using some basic trig.
-            Path path = new Path();
             for (int i = 0; i < 5; ++i) {
                 float pointAngle = ((2.0f / 5.0f) * (float)Math.PI * (float)i) +
                         this.angle;
-                float x = convertX((float)Math.cos(pointAngle) * this.radius +
-                        this.x, canvas);
-                float y = convertY((float)Math.sin(pointAngle) * this.radius +
-                        this.y, canvas);
+                float x = coords.convertX((float)Math.cos(pointAngle) *
+                        this.radius + this.x);
+                float y = coords.convertY((float)Math.sin(pointAngle) *
+                        this.radius + this.y);
                 if (i == 0) {
-                    path.moveTo(x, y);
+                    pathCache.moveTo(x, y);
                 } else {
-                    path.lineTo(x, y);
+                    pathCache.lineTo(x, y);
                 }
             }
-            path.close();
+            pathCache.close();
 
-            canvas.drawPath(path, paintCache);
+            canvas.drawPath(pathCache, paintCache);
+            pathCache.reset();
         }
 
         public void forceFrom(Pentagon p, Force addTo) {
@@ -232,42 +266,7 @@ public class PentagonView extends View {
         return Math.max(Math.min(val, max), min);
     }
 
-    /**
-     * Convert a relative coordinate from 0 to 1 into a view coordinate.
-     * @param x The relative coordinate
-     * @param c The canvas (whose dimensions are used for scaling)
-     * @return A scaled coordinate
-     */
-    protected static float convertX(float x, Canvas c) {
-        float width = (float)c.getWidth();
-        float height = (float)c.getHeight();
-        if (width > height) {
-            return x * width;
-        } else {
-            float offset = (height - width) / 2;
-            return (x * height) - offset;
-        }
-    }
-
-    /**
-     * Convert a relative coordinate from 0 to 1 into a view coordinate.
-     * @param y The relative coordinate
-     * @param c The canvas (whose dimensions are used for scaling)
-     * @return A scaled coordinate
-     */
-    protected static float convertY(float y, Canvas c) {
-        float width = (float)c.getWidth();
-        float height = (float)c.getHeight();
-        if (height > width) {
-            return y * height;
-        } else {
-            float offset = (width - height) / 2;
-            return (y * width) - offset;
-        }
-    }
-
     private void init(AttributeSet attrs, int defStyle) {
-        animations = new PentagonAnimation[10];
         for (int i = 0; i < animations.length; ++i) {
             Pentagon start = randomPentagon();
             animations[i] = new PentagonAnimation(start, start.copy(), 0);
@@ -279,11 +278,12 @@ public class PentagonView extends View {
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         canvas.drawColor(Color.rgb(0x34, 0x98, 0xd8));
+        coordinateSystem.setSize(canvas.getWidth(), canvas.getHeight());
 
         // Draw each PentagonAnimation.
         for (PentagonAnimation animation : animations) {
             Pentagon pentagon = animation.step();
-            pentagon.draw(canvas);
+            pentagon.draw(canvas, coordinateSystem);
             if (animation.done()) {
                 randomizeAnimation(animation);
             }
