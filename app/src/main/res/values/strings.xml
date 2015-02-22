@@ -4,5 +4,6 @@
     <string name="app_name">Learning1</string>
     <string name="hello_world">Hello world!</string>
     <string name="action_settings">Settings</string>
+    <color name="blue">#3498d8</color>
 
 </resources>
