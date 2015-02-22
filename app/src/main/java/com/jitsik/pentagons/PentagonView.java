@@ -80,7 +80,6 @@ public class PentagonView extends View {
             }
         }
 
-
         // Draw again on the next frame.
         postInvalidateOnAnimation();
     }
