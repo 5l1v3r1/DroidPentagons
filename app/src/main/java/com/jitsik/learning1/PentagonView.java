@@ -1,20 +1,16 @@
 package com.jitsik.learning1;
 
 import android.content.Context;
-import android.content.res.TypedArray;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.Point;
-import android.graphics.drawable.Drawable;
+import android.graphics.Rect;
 import android.os.SystemClock;
-import android.text.TextPaint;
 import android.util.AttributeSet;
-import android.util.Log;
-import android.view.Choreographer;
 import android.view.View;
-import android.view.ViewTreeObserver;
 
 
 /**
@@ -22,8 +18,9 @@ import android.view.ViewTreeObserver;
  */
 public class PentagonView extends View {
 
-    public PentagonAnimation[] animations = new PentagonAnimation[10];
-    public Coords coordinateSystem = new Coords();
+    private PentagonAnimation[] animations = new PentagonAnimation[10];
+    private Coords coordinateSystem = new Coords();
+    private Bitmap pentagonImage;
 
     /**
      * Coords converts coordinate systems.
@@ -69,11 +66,6 @@ public class PentagonView extends View {
             this.y = 0;
         }
 
-        public Force(float x, float y) {
-            this.x = x;
-            this.y = y;
-        }
-
         public void addRandom(float max) {
             this.x += (Math.random() * max * 2) - max;
             this.y += (Math.random() * max * 2) - max;
@@ -106,8 +98,6 @@ public class PentagonView extends View {
         public float angle;
         public float radius;
         public float opacity;
-        private Paint paintCache;
-        private Path pathCache;
 
         Pentagon(float x, float y, float angle, float radius, float opacity) {
             this.x = x;
@@ -115,12 +105,6 @@ public class PentagonView extends View {
             this.angle = angle;
             this.radius = radius;
             this.opacity = opacity;
-
-            paintCache = new Paint();
-            paintCache.setFlags(Paint.ANTI_ALIAS_FLAG);
-            paintCache.setStyle(Paint.Style.FILL);
-
-            pathCache = new Path();
         }
 
         public void clipAngle() {
@@ -136,28 +120,20 @@ public class PentagonView extends View {
             return new Pentagon(x, y, angle, radius, opacity);
         }
 
-        public void draw(Canvas canvas, Coords coords) {
-            paintCache.setColor(Color.argb((int)(opacity * 255.0f), 255, 255,
-                    255));
+        public void draw(Canvas canvas, Bitmap bmp, Coords coords) {
+            float realX = coords.convertX(x);
+            float realY = coords.convertY(y);
+            float r = coords.scale * (float)radius;
+            Matrix matrix = new Matrix();
+            matrix.postScale(2 * r / (float)bmp.getWidth(),
+                    2 * r / (float)bmp.getHeight());
+            matrix.postTranslate(-r, -r);
+            matrix.postRotate(this.angle * 180.0f / (float)Math.PI);
+            matrix.postTranslate(realX, realY);
 
-            // Draw a pentagon using some basic trig.
-            for (int i = 0; i < 5; ++i) {
-                float pointAngle = ((2.0f / 5.0f) * (float)Math.PI * (float)i) +
-                        this.angle;
-                float x = coords.convertX((float)Math.cos(pointAngle) *
-                        this.radius + this.x);
-                float y = coords.convertY((float)Math.sin(pointAngle) *
-                        this.radius + this.y);
-                if (i == 0) {
-                    pathCache.moveTo(x, y);
-                } else {
-                    pathCache.lineTo(x, y);
-                }
-            }
-            pathCache.close();
-
-            canvas.drawPath(pathCache, paintCache);
-            pathCache.reset();
+            Paint paint = new Paint();
+            paint.setAlpha((int)Math.round(opacity * 255.0f));
+            canvas.drawBitmap(bmp, matrix, paint);
         }
 
         public void forceFrom(Pentagon p, Force addTo) {
@@ -267,6 +243,31 @@ public class PentagonView extends View {
     }
 
     private void init(AttributeSet attrs, int defStyle) {
+        // Generate the pentagon bitmap.
+        int bitmapSize = 512;
+        Bitmap b = Bitmap.createBitmap(bitmapSize, bitmapSize,
+                Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(b);
+        Path p = new Path();
+        float r = (float)bitmapSize / 2.0f;
+        for (int i = 0; i < 5; ++i) {
+            float angle = 0.4f * (float)i * (float)Math.PI;
+            float x = r + (float)Math.cos(angle) * r;
+            float y = r + (float)Math.sin(angle) * r;
+            if (i == 0) {
+                p.moveTo(x, y);
+            } else {
+                p.lineTo(x, y);
+            }
+        }
+        p.close();
+        Paint paint = new Paint();
+        paint.setFlags(Paint.ANTI_ALIAS_FLAG);
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.WHITE);
+        c.drawPath(p, paint);
+        pentagonImage = b;
+
         for (int i = 0; i < animations.length; ++i) {
             Pentagon start = randomPentagon();
             animations[i] = new PentagonAnimation(start, start.copy(), 0);
@@ -283,7 +284,7 @@ public class PentagonView extends View {
         // Draw each PentagonAnimation.
         for (PentagonAnimation animation : animations) {
             Pentagon pentagon = animation.step();
-            pentagon.draw(canvas, coordinateSystem);
+            pentagon.draw(canvas, pentagonImage, coordinateSystem);
             if (animation.done()) {
                 randomizeAnimation(animation);
             }
